@@ -153,8 +153,9 @@ public class TestController
 
     public bool StartRecording()
     {
-        if (State != TestState.Ready) return false;
-        if (CurrentTest == null) return false; // 必须先创建试验
+        // 允许在升温中或就绪时开始记录
+        if (State != TestState.Preparing && State != TestState.Ready) return false;
+        if (CurrentTest == null) return false;
 
         if (_pidOutputQueue.Count > 0 && CurrentTest != null)
             CurrentTest.ConstPower = _pidOutputQueue.Average();
