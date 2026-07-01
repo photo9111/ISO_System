@@ -223,6 +223,17 @@ public partial class MainForm : Form
         plotView.Model = plotModel;
     }
 
+    private void ClearChart()
+    {
+        seriesTF1.Points.Clear();
+        seriesTF2.Points.Clear();
+        seriesTS.Points.Clear();
+        seriesTC.Points.Clear();
+        plotModel.Axes[0].Minimum = 0;
+        plotModel.Axes[0].Maximum = 600;
+        plotModel.InvalidatePlot(true);
+    }
+
     #endregion
 
     #region Query Tab
@@ -450,6 +461,8 @@ public partial class MainForm : Form
         if (dlg.ShowDialog() == DialogResult.OK)
         {
             _tc.CreateTest(dlg.TestMaster!, dlg.ProductMaster!);
+            // 清空曲线，新试验从零开始
+            ClearChart();
             if (_tc.State == TestState.Idle)
             {
                 _tc.StartHeating();
