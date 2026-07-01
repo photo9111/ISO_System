@@ -374,7 +374,12 @@ public partial class MainForm : Form
         lblTCVal.Text = $"{temps["TC"]:F1} °C";
         lblTCalVal.Text = $"{temps["TCal"]:F1} °C";
         lblCalTemp.Text = $"当前校准温: {temps["TCal"]:F1} °C";
-        lblTimer.Text = $"计时: {e.ElapsedSeconds} 秒";
+        // 始终显示系统运行时间 + 记录阶段计时
+        int runSec = _ctx.DaqWorker.TotalRunSeconds;
+        string timerText = _tc.State == TestState.Recording
+            ? $"记录: {e.ElapsedSeconds} 秒 | 运行: {runSec} 秒"
+            : $"运行: {runSec} 秒";
+        lblTimer.Text = timerText;
         if (!double.IsNaN(e.Drift)) lblDrift.Text = $"温漂: {e.Drift:F2} °C/10min";
         if (_tc.CurrentTest != null) lblSample.Text = $"样品: {_tc.CurrentTest.ProductId}";
 

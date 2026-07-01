@@ -1,4 +1,5 @@
 using ISO11820.Models;
+using System.Diagnostics;
 
 namespace ISO11820.Services;
 
@@ -10,14 +11,23 @@ public class DaqWorker : IDisposable
     private Dictionary<string, double> _temperatures;
     private readonly List<double> _furnaceTempHistory = new();
     private readonly List<MasterMessage> _pendingMessages = new();
-    private DateTime _lastSecondTime = DateTime.Now;
+
+    private readonly Stopwatch _stopwatch = new();       // 系统运行总计时
+    private long _recordingStartMs;                       // 记录开始时刻
 
     public event EventHandler<DataBroadcastEventArgs>? DataBroadcast;
     public event Action? SecondElapsed;
 
     public Dictionary<string, double> Temperatures => _temperatures;
     public TestState CurrentState { get; set; } = TestState.Idle;
-    public int ElapsedSeconds { get; private set; }
+
+    // 记录阶段已过秒数
+    public int ElapsedSeconds => CurrentState == TestState.Recording
+        ? (int)((_stopwatch.ElapsedMilliseconds - _recordingStartMs) / 1000)
+        : 0;
+
+    // 系统总运行秒数（始终递增，用于调试）
+    public int TotalRunSeconds => (int)(_stopwatch.ElapsedMilliseconds / 1000);
 
     public DaqWorker(SensorSimulator simulator, SimulationConfig config)
     {
@@ -26,7 +36,6 @@ public class DaqWorker : IDisposable
         _temperatures = simulator.GetInitialTemperatures();
     }
 
-    /// <summary>必须在 UI 线程调用，因为 WinForms Timer 需要消息泵</summary>
     public void Start()
     {
         if (_timer == null)
@@ -34,20 +43,18 @@ public class DaqWorker : IDisposable
             _timer = new System.Windows.Forms.Timer { Interval = 800 };
             _timer.Tick += OnTick;
         }
-        _lastSecondTime = DateTime.Now;
+        _stopwatch.Start();
         _timer.Start();
     }
 
-    public void Stop()
-    {
-        _timer?.Stop();
-    }
+    public void Stop() => _timer?.Stop();
 
     public void ResetElapsed()
     {
-        ElapsedSeconds = 0;
-        _lastSecondTime = DateTime.Now;
+        _recordingStartMs = _stopwatch.ElapsedMilliseconds;
     }
+
+    private int _lastDisplayedSecond = -1;
 
     private void OnTick(object? sender, EventArgs e)
     {
@@ -59,20 +66,18 @@ public class DaqWorker : IDisposable
         _furnaceTempHistory.Add(_temperatures["TF1"]);
         if (_furnaceTempHistory.Count > 600) _furnaceTempHistory.RemoveAt(0);
 
-        // 秒检测（用于 Recording 计时器）
-        var now = DateTime.Now;
-        if ((now - _lastSecondTime).TotalSeconds >= 1.0)
+        // 秒检测
+        int currentSecond = TotalRunSeconds;
+        if (currentSecond != _lastDisplayedSecond)
         {
-            _lastSecondTime = now;
-            if (CurrentState == TestState.Recording)
-                ElapsedSeconds++;
+            _lastDisplayedSecond = currentSecond;
             SecondElapsed?.Invoke();
         }
 
         // 计算温漂
         double drift = DriftCalculator.CalculateDrift(_furnaceTempHistory);
 
-        // 广播数据到 UI（当前已在 UI 线程，无需 Invoke）
+        // 广播数据
         var args = new DataBroadcastEventArgs
         {
             Temperatures = new Dictionary<string, double>(_temperatures),
@@ -97,11 +102,11 @@ public class DaqWorker : IDisposable
     }
 
     public List<double> GetFurnaceTempHistory() => new(_furnaceTempHistory);
-
     public double GetCurrentDrift() => DriftCalculator.CalculateDrift(_furnaceTempHistory);
 
     public void Dispose()
     {
+        _stopwatch.Stop();
         _timer?.Stop();
         _timer?.Dispose();
         _timer = null;
