@@ -24,7 +24,7 @@ public class DaqWorker : IDisposable
         _simulator = simulator;
         _config = config;
         _temperatures = simulator.GetInitialTemperatures();
-        _timer = new System.Timers.Timer(200); // 200ms faster tick for smoother UI
+        _timer = new System.Timers.Timer(800); // 800ms per tick, matches simulator Update
         _timer.Elapsed += OnTick;
         _timer.AutoReset = true;
     }
