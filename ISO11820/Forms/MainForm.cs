@@ -445,7 +445,21 @@ public partial class MainForm : Form
         topPanel.Controls.Add(txtCalRefTemp);
         topPanel.Controls.Add(btnCal);
 
-        dgvCalRecords = new DataGridView { Dock = DockStyle.Fill, BackgroundColor = Color.FromArgb(30, 30, 30), ForeColor = Color.White, GridColor = Color.Gray, AllowUserToAddRows = false, ReadOnly = true, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill };
+        dgvCalRecords = new DataGridView
+        {
+            Dock = DockStyle.Fill,
+            BackgroundColor = Color.FromArgb(30, 30, 30),
+            ForeColor = Color.White,
+            GridColor = Color.FromArgb(60, 60, 60),
+            AllowUserToAddRows = false,
+            ReadOnly = true,
+            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+            EnableHeadersVisualStyles = false,
+            ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(50, 50, 50), ForeColor = Color.FromArgb(200, 200, 200), Font = new Font("Microsoft YaHei", 9, FontStyle.Bold) },
+            RowHeadersDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(40, 40, 40), ForeColor = Color.Gray },
+            DefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(35, 35, 35), ForeColor = Color.FromArgb(220, 220, 220), SelectionBackColor = Color.FromArgb(0, 100, 180), SelectionForeColor = Color.White },
+            AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(42, 42, 42), ForeColor = Color.FromArgb(220, 220, 220), SelectionBackColor = Color.FromArgb(0, 100, 180), SelectionForeColor = Color.White }
+        };
         tabCalibration.Controls.Add(dgvCalRecords);
         tabCalibration.Controls.Add(topPanel);
         LoadCalRecords();
