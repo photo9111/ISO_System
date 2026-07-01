@@ -274,18 +274,69 @@ public partial class MainForm : Form
             AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
             SelectionMode = DataGridViewSelectionMode.FullRowSelect
         };
-        dgvRecords.CellDoubleClick += (s, e) =>
+        // 详情面板（右侧常显示）
+        var detailPanel = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(35, 35, 35), Padding = new Padding(10) };
+        var txtDetail = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            Multiline = true,
+            ReadOnly = true,
+            BackColor = Color.FromArgb(35, 35, 35),
+            ForeColor = Color.FromArgb(200, 200, 200),
+            Font = new Font("Microsoft YaHei", 10),
+            BorderStyle = BorderStyle.None,
+            Text = "← 选中一条记录查看详情"
+        };
+        detailPanel.Controls.Add(txtDetail);
+
+        // 选中行时更新详情
+        dgvRecords.SelectionChanged += (s, e) =>
         {
             if (dgvRecords.CurrentRow?.DataBoundItem == null) return;
             dynamic row = dgvRecords.CurrentRow.DataBoundItem;
             var tm = _ctx.Db.GetTestMaster((string)row.ProductId, (string)row.TestId);
-            if (tm != null) MessageBox.Show(
-                $"样品编号: {tm.ProductId}\n试验标识: {tm.TestId}\n日期: {tm.TestDate}\n操作员: {tm.Operator}\n" +
-                $"失重率: {tm.LostWeightPer:F2}%\n综合温升: {tm.DeltaTf:F1}°C\n时长: {tm.TotalTestTime}s\n备注: {tm.Remark}",
-                "试验详情", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            if (tm != null)
+            {
+                string verdict = (tm.DeltaTf <= 50 && tm.LostWeightPer <= 50 && tm.FlameDuration < 5)
+                    ? "通过 — 材料判定为不燃" : "不通过";
+                txtDetail.Text =
+                    $"样品编号: {tm.ProductId}\r\n" +
+                    $"试验标识: {tm.TestId}\r\n" +
+                    $"试验日期: {tm.TestDate}\r\n" +
+                    $"操作员: {tm.Operator}\r\n" +
+                    $"━━━━━━━━━━━━━━━━\r\n" +
+                    $"环境温度: {tm.EnvTemp:F1} °C\r\n" +
+                    $"环境湿度: {tm.EnvHumidity:F1} %\r\n" +
+                    $"━━━━━━━━━━━━━━━━\r\n" +
+                    $"试验前质量: {tm.PreWeight:F2} g\r\n" +
+                    $"试验后质量: {tm.PostWeight:F2} g\r\n" +
+                    $"失重量: {tm.LostWeight:F2} g\r\n" +
+                    $"失重率: {tm.LostWeightPer:F2} %\r\n" +
+                    $"━━━━━━━━━━━━━━━━\r\n" +
+                    $"炉温1 温升: {tm.DeltaTf1:F1} °C\r\n" +
+                    $"炉温2 温升: {tm.DeltaTf2:F1} °C\r\n" +
+                    $"表面温升: {tm.DeltaTs:F1} °C\r\n" +
+                    $"中心温升: {tm.DeltaTc:F1} °C\r\n" +
+                    $"综合温升: {tm.DeltaTf:F1} °C\r\n" +
+                    $"━━━━━━━━━━━━━━━━\r\n" +
+                    $"火焰持续: {tm.FlameDuration} 秒\r\n" +
+                    $"试验时长: {tm.TotalTestTime} 秒\r\n" +
+                    $"备注: {tm.Remark}\r\n" +
+                    $"━━━━━━━━━━━━━━━━\r\n" +
+                    $"判定结论: {verdict}";
+            }
         };
 
-        tabQuery.Controls.Add(dgvRecords);
+        var splitQuery = new SplitContainer
+        {
+            Dock = DockStyle.Fill,
+            Orientation = Orientation.Vertical,
+            SplitterDistance = 550
+        };
+        splitQuery.Panel1.Controls.Add(dgvRecords);
+        splitQuery.Panel2.Controls.Add(detailPanel);
+
+        tabQuery.Controls.Add(splitQuery);
         tabQuery.Controls.Add(topPanel);
 
         var ops = _ctx.Db.GetAllOperators();
