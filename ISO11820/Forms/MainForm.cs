@@ -51,8 +51,20 @@ public partial class MainForm : Form
         InitializeComponent();
         SetupPlot();
         WireEvents();
+        ShowInitialTemperatures();
         UpdateButtonStates();
-        _ctx.DaqWorker.Start();
+    }
+
+    private void ShowInitialTemperatures()
+    {
+        // 显示初始温度但不启动仿真（等用户点击"开始升温"时才启动）
+        var temps = _ctx.DaqWorker.Temperatures;
+        lblTF1Val.Text = $"{temps["TF1"]:F1} °C";
+        lblTF2Val.Text = $"{temps["TF2"]:F1} °C";
+        lblTSVal.Text = $"{temps["TS"]:F1} °C";
+        lblTCVal.Text = $"{temps["TC"]:F1} °C";
+        lblTCalVal.Text = $"{temps["TCal"]:F1} °C";
+        lblCalTemp.Text = $"当前校准温: {temps["TCal"]:F1} °C";
     }
 
     #region UI Setup
