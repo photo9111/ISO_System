@@ -1,3 +1,4 @@
+using Serilog;
 using AppContext = ISO11820.Global.AppContext;
 
 namespace ISO11820.Forms;
@@ -119,6 +120,7 @@ public partial class LoginForm : Form
         var op = AppContext.Instance.Db.ValidateLogin(username, password);
         if (op != null)
         {
+            Log.Information("用户登录: {Username} 角色: {Role}", op.Username, op.Role);
             AppContext.Instance.CurrentOperator = op.Username;
             AppContext.Instance.CurrentRole = op.Role;
 

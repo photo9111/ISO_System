@@ -9,7 +9,6 @@ public class DaqWorker : IDisposable
     private readonly SensorSimulator _simulator;
     private readonly SimulationConfig _config;
     private Dictionary<string, double> _temperatures;
-    private readonly List<double> _furnaceTempHistory = new();
     private readonly List<MasterMessage> _pendingMessages = new();
 
     private readonly Stopwatch _stopwatch = new();       // 系统运行总计时
@@ -20,6 +19,8 @@ public class DaqWorker : IDisposable
 
     public Dictionary<string, double> Temperatures => _temperatures;
     public TestState CurrentState { get; set; } = TestState.Idle;
+    public bool IsStable { get; set; } = false;
+    public double CurrentDrift { get; set; } = double.NaN;
 
     // 记录阶段已过秒数
     public int ElapsedSeconds => CurrentState == TestState.Recording
@@ -62,10 +63,6 @@ public class DaqWorker : IDisposable
         if (_config.EnableSimulation)
             _temperatures = _simulator.Update(_temperatures, CurrentState);
 
-        // 记录炉温历史
-        _furnaceTempHistory.Add(_temperatures["TF1"]);
-        if (_furnaceTempHistory.Count > 600) _furnaceTempHistory.RemoveAt(0);
-
         // 秒检测
         int currentSecond = TotalRunSeconds;
         if (currentSecond != _lastDisplayedSecond)
@@ -74,17 +71,14 @@ public class DaqWorker : IDisposable
             SecondElapsed?.Invoke();
         }
 
-        // 计算温漂
-        double drift = DriftCalculator.CalculateDrift(_furnaceTempHistory);
-
-        // 广播数据
+        // 广播数据（温漂由 TestController 统一计算并写入 CurrentDrift）
         var args = new DataBroadcastEventArgs
         {
             Temperatures = new Dictionary<string, double>(_temperatures),
             CurrentState = CurrentState.ToString(),
             ElapsedSeconds = ElapsedSeconds,
-            IsStable = false,
-            Drift = drift,
+            IsStable = IsStable,
+            Drift = CurrentDrift,
             Messages = new List<MasterMessage>(_pendingMessages)
         };
 
@@ -100,9 +94,6 @@ public class DaqWorker : IDisposable
             Message = message
         });
     }
-
-    public List<double> GetFurnaceTempHistory() => new(_furnaceTempHistory);
-    public double GetCurrentDrift() => DriftCalculator.CalculateDrift(_furnaceTempHistory);
 
     public void Dispose()
     {

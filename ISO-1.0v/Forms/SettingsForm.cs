@@ -6,7 +6,7 @@ namespace ISO11820.Forms;
 public partial class SettingsForm : Form
 {
     private NumericUpDown nudInitTemp = null!, nudTargetTemp = null!;
-    private NumericUpDown nudHeatRate = null!, nudFluctuation = null!;
+    private NumericUpDown nudHeatRate = null!, nudFluctuation = null!, nudDriftThreshold = null!;
     private Button btnOK = null!, btnCancel = null!;
 
     public SettingsForm()
@@ -18,7 +18,7 @@ public partial class SettingsForm : Form
     private void InitializeComponent()
     {
         this.Text = "仿真参数设置";
-        this.Size = new Size(380, 300);
+        this.Size = new Size(380, 340);
         this.StartPosition = FormStartPosition.CenterParent;
         this.FormBorderStyle = FormBorderStyle.FixedDialog;
         this.MaximizeBox = false;
@@ -29,7 +29,8 @@ public partial class SettingsForm : Form
         nudInitTemp = AddRow("初始炉温 (°C):", y, 0, 1000); y += 35;
         nudTargetTemp = AddRow("目标炉温 (°C):", y, 0, 1000); y += 35;
         nudHeatRate = AddRow("升温速率 (°C/s):", y, 1, 100); y += 35;
-        nudFluctuation = AddRow("温度波动 (±°C):", y, 0, 10); y += 50;
+        nudFluctuation = AddRow("温度波动 (±°C):", y, 0, 10); y += 35;
+        nudDriftThreshold = AddRow("温漂阈值 (°C/10min):", y, 0, 10); y += 50;
 
         btnOK = new Button { Text = "保存", Location = new Point(100, y), Size = new Size(80, 32),
             BackColor = Color.FromArgb(0, 122, 204), ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
@@ -56,6 +57,7 @@ public partial class SettingsForm : Form
         nudTargetTemp.Value = (decimal)cfg.TargetFurnaceTemp;
         nudHeatRate.Value = (decimal)cfg.HeatingRatePerSecond;
         nudFluctuation.Value = (decimal)cfg.TempFluctuation;
+        nudDriftThreshold.Value = (decimal)cfg.MaxTemperatureDriftPerTenMinutes;
     }
 
     private void SaveValues()
@@ -65,5 +67,6 @@ public partial class SettingsForm : Form
         cfg.TargetFurnaceTemp = (double)nudTargetTemp.Value;
         cfg.HeatingRatePerSecond = (double)nudHeatRate.Value;
         cfg.TempFluctuation = (double)nudFluctuation.Value;
+        cfg.MaxTemperatureDriftPerTenMinutes = (double)nudDriftThreshold.Value;
     }
 }

@@ -26,6 +26,8 @@ public sealed class AppContext
     {
         SimulationConfig = new SimulationConfig();
         Configuration.GetSection("Simulation").Bind(SimulationConfig);
+        // 从 Hardware 段读取恒功率（仿真 PID 输出计算用）
+        SimulationConfig.ConstPower = double.TryParse(Configuration["Hardware:ConstPower"], out double cp) ? cp : 2048.0;
 
         string dbPath = Configuration["Database:SqlitePath"] ?? "Data\\ISO11820.db";
         string fullPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dbPath);

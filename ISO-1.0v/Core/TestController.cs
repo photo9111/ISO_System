@@ -1,6 +1,7 @@
 using ISO11820.Data;
 using ISO11820.Models;
 using ISO11820.Services;
+using Serilog;
 
 namespace ISO11820.Core;
 
@@ -40,6 +41,16 @@ public class TestController
         double target = _simConfig.TargetFurnaceTemp;
         double threshold = _simConfig.StableThreshold;
 
+        // 统一计算温漂，同步到 DaqWorker（避免重复维护温度历史）
+        _driftHistory.Add(tf1);
+        if (_driftHistory.Count > 600) _driftHistory.RemoveAt(0);
+        _daqWorker.CurrentDrift = DriftCalculator.CalculateDrift(_driftHistory);
+
+        // 模拟 PID 输出值：加热时高功率，稳定时趋近恒功率
+        double ambient = CurrentTest?.EnvTemp ?? 25.0;
+        double simulatedPidOutput = (tf1 - ambient) / (target - ambient) * _simConfig.ConstPower;
+        simulatedPidOutput = Math.Max(0, simulatedPidOutput);
+
         if (State == TestState.Preparing)
         {
             bool inRange = tf1 >= (target - threshold) && tf1 <= (target + threshold);
@@ -53,7 +64,9 @@ public class TestController
                 // 需要足够的稳定数据和足够的 tick 数
                 if (_stableTickCount > 3 && _driftHistory.Count >= 10)
                 {
-                    double drift = DriftCalculator.CalculateDrift(_driftHistory);
+                    // 文档: 稳定计数器 > 3 时 IsStable = true
+                    _daqWorker.IsStable = true;
+                    double drift = _daqWorker.CurrentDrift;
                     if (!double.IsNaN(drift) && Math.Abs(drift) <= maxDrift)
                     {
                         TransitionTo(TestState.Ready);
@@ -65,15 +78,16 @@ public class TestController
             {
                 _stableTickCount = 0;
                 _driftHistory.Clear();
+                _daqWorker.IsStable = false;
             }
 
-            _pidOutputQueue.Add(tf1);
+            _pidOutputQueue.Add(simulatedPidOutput);
             if (_pidOutputQueue.Count > 600) _pidOutputQueue.RemoveAt(0);
         }
 
         if (State == TestState.Ready)
         {
-            _pidOutputQueue.Add(tf1);
+            _pidOutputQueue.Add(simulatedPidOutput);
             if (_pidOutputQueue.Count > 600) _pidOutputQueue.RemoveAt(0);
 
             bool inRange = tf1 >= (target - threshold) && tf1 <= (target + threshold);
@@ -119,17 +133,19 @@ public class TestController
         if (secs >= targetDuration)
         {
             _daqWorker.AddMessage($"记录时间到达 {targetDuration} 秒，试验自动结束");
+            Log.Information("试验自动结束: 到达目标时长 {Duration}s", targetDuration);
             TransitionTo(TestState.Complete);
             return;
         }
 
         if (CurrentTest.DurationMode == "Standard" && secs >= 1800 && secs % 300 == 0)
         {
-            double drift = DriftCalculator.CalculateDrift(_driftHistory);
+            double drift = _daqWorker.CurrentDrift;
             double maxDrift = _simConfig.MaxTemperatureDriftPerTenMinutes;
             if (!double.IsNaN(drift) && Math.Abs(drift) <= maxDrift)
             {
                 _daqWorker.AddMessage("满足终止条件，试验结束");
+                Log.Information("试验提前终止: 温漂={Drift:F2}°C/10min <= {Threshold}°C/10min", drift, maxDrift);
                 TransitionTo(TestState.Complete);
             }
         }
@@ -153,11 +169,12 @@ public class TestController
 
     public bool StartRecording()
     {
-        // 允许在升温中或就绪时开始记录
-        if (State != TestState.Preparing && State != TestState.Ready) return false;
+        // 文档规格: 只有 Ready 状态才能开始记录
+        if (State != TestState.Ready) return false;
         if (CurrentTest == null) return false;
 
-        if (_pidOutputQueue.Count > 0 && CurrentTest != null)
+        // 恒功率 = 队列中所有PID输出值的平均值（文档 7.2 节）
+        if (_pidOutputQueue.Count > 0)
             CurrentTest.ConstPower = _pidOutputQueue.Average();
 
         _daqWorker.ResetElapsed();
@@ -195,6 +212,8 @@ public class TestController
         _stableTickCount = 0;
         _pidOutputQueue.Clear();
         _driftHistory.Clear();
+        Log.Information("新建试验: ProductId={ProductId} TestId={TestId} 操作员={Operator} 时长模式={Mode} 环境温度={EnvTemp}°C",
+            test.ProductId, test.TestId, test.Operator, test.DurationMode, test.EnvTemp);
     }
 
     public void SaveTestRecord(double postWeight, int hasFlame, int flameStartTime,
@@ -223,6 +242,8 @@ public class TestController
         CurrentTest.DeltaTf = CurrentTest.DeltaTs;
 
         _db.InsertTestMaster(CurrentTest);
+        Log.Information("试验记录已保存: ProductId={ProductId} TestId={TestId} 失重率={LostWeightPer:F2}% 温升={DeltaTf:F1}°C 时长={TotalTestTime}s",
+            CurrentTest.ProductId, CurrentTest.TestId, CurrentTest.LostWeightPer, CurrentTest.DeltaTf, CurrentTest.TotalTestTime);
     }
 
     public void ClearCurrentTest()
@@ -247,8 +268,11 @@ public class TestController
 
     private void TransitionTo(TestState newState)
     {
+        var oldState = State;
         State = newState;
         _daqWorker.CurrentState = newState;
         StateChanged?.Invoke(this, newState.ToString());
+        Log.Information("状态切换: {OldState} → {NewState} | 操作员: {Operator} | 样品: {ProductId}",
+            oldState, newState, CurrentTest?.Operator ?? "-", CurrentTest?.ProductId ?? "-");
     }
 }

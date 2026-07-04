@@ -5,6 +5,7 @@ using OxyPlot;
 using OxyPlot.Series;
 using OxyPlot.WindowsForms;
 using OxyPlot.Axes;
+using Serilog;
 using AppContext = ISO11820.Global.AppContext;
 
 namespace ISO11820.Forms;
@@ -54,6 +55,12 @@ public partial class MainForm : Form
         ShowInitialTemperatures();
         UpdateButtonStates();
         // 不立即启动——等用户点击"开始升温"或创建试验时才启动
+
+        // 系统初始化消息（文档 2.6 节）
+        string time = DateTime.Now.ToString("HH:mm:ss");
+        rtbLog.SelectionColor = Color.White;
+        rtbLog.AppendText($"{time}  系统初始化，操作员：{_ctx.CurrentOperator}\n");
+        rtbLog.ScrollToCaret();
     }
 
     private void ShowInitialTemperatures()
@@ -101,7 +108,7 @@ public partial class MainForm : Form
             WordWrap = true
         };
 
-        var topPanel = new Panel { Dock = DockStyle.Top, Height = 160, BackColor = Color.FromArgb(30, 30, 30) };
+        var topPanel = new Panel { Dock = DockStyle.Top, Height = 170, BackColor = Color.FromArgb(30, 30, 30) };
         topPanel.Controls.Add(tempPanel);
         topPanel.Controls.Add(statusPanel);
         topPanel.Controls.Add(buttonPanel);
@@ -173,7 +180,7 @@ public partial class MainForm : Form
 
     private Panel CreateButtonPanel()
     {
-        var panel = new Panel { Location = new Point(1020, 10), Size = new Size(220, 130), BackColor = Color.FromArgb(30, 30, 30) };
+        var panel = new Panel { Location = new Point(1020, 10), Size = new Size(220, 155), BackColor = Color.FromArgb(30, 30, 30) };
 
         btnNewTest = MkBtn("新建试验", new Point(5, 5), Color.FromArgb(60, 120, 200));
         btnStartHeat = MkBtn("开始升温", new Point(5, 42), Color.FromArgb(200, 80, 60));
@@ -186,7 +193,7 @@ public partial class MainForm : Form
         btnNewTest.Click += (s, e) => OpenNewTestDialog();
         btnStartHeat.Click += (s, e) => { if (_tc.StartHeating()) { _ctx.DaqWorker.Start(); UpdateButtonStates(); } };
         btnStopHeat.Click += (s, e) => { if (_tc.StopHeating()) UpdateButtonStates(); };
-        btnStartRecord.Click += (s, e) => { if (_tc.StartRecording()) UpdateButtonStates(); };
+        btnStartRecord.Click += (s, e) => { if (_tc.StartRecording()) { ClearChart(); UpdateButtonStates(); } };
         btnStopRecord.Click += (s, e) => { if (_tc.StopRecording()) UpdateButtonStates(); };
         btnTestRecord.Click += (s, e) => OpenTestRecordDialog();
         btnSettings.Click += (s, e) => { using var dlg = new SettingsForm(); dlg.ShowDialog(); };
@@ -556,7 +563,7 @@ public partial class MainForm : Form
         btnNewTest.Enabled = s == TestState.Idle || (s == TestState.Preparing && !hasActive) || (s == TestState.Complete && !hasUnSaved);
         btnStartHeat.Enabled = s == TestState.Idle;
         btnStopHeat.Enabled = s == TestState.Preparing || s == TestState.Ready || s == TestState.Complete;
-        btnStartRecord.Enabled = (s == TestState.Preparing || s == TestState.Ready) && !hasUnSaved && _tc.CurrentTest != null;
+        btnStartRecord.Enabled = s == TestState.Ready && !hasUnSaved && _tc.CurrentTest != null;
         btnStopRecord.Enabled = s == TestState.Recording;
         btnTestRecord.Enabled = hasUnSaved;
         btnSettings.Enabled = s != TestState.Recording;
@@ -593,11 +600,12 @@ public partial class MainForm : Form
                 _ctx.ExportService.ExportCsv(tm, tempData);
                 _ctx.ExportService.ExportExcel(tm, tempData);
                 if (bool.TryParse(_ctx.Configuration["Report:EnablePdfExport"], out bool enablePdf) && enablePdf)
-                    _ctx.ExportService.ExportPdf(tm);
+                    _ctx.ExportService.ExportPdf(tm, tempData);
                 MessageBox.Show("试验记录已保存，报告已生成。", "完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
+                Log.Error(ex, "导出报告失败: ProductId={ProductId} TestId={TestId}", tm.ProductId, tm.TestId);
                 MessageBox.Show($"导出报告失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             _tc.ClearCurrentTest();

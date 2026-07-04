@@ -12,4 +12,5 @@ public class SimulationConfig
     public double StableThreshold { get; set; } = 3.0;
     public bool SimulateFlame { get; set; } = false;
     public double MaxTemperatureDriftPerTenMinutes { get; set; } = 2.0;
+    public double ConstPower { get; set; } = 2048.0;
 }

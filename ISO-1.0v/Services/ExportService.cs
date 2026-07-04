@@ -2,6 +2,9 @@ using System.Text;
 using ISO11820.Models;
 using Microsoft.Extensions.Configuration;
 using OfficeOpenXml;
+using OxyPlot;
+using OxyPlot.Axes;
+using OxyPlot.Series;
 using PdfSharp.Pdf;
 using PdfSharp.Drawing;
 
@@ -133,7 +136,7 @@ public class ExportService
         row++;
     }
 
-    public string ExportPdf(TestMaster tm)
+    public string ExportPdf(TestMaster tm, List<TemperatureData> tempData)
     {
         Directory.CreateDirectory(ReportDir);
         string filePath = Path.Combine(ReportDir, $"{tm.TestId}_报告.pdf");
@@ -159,7 +162,21 @@ public class ExportService
         DrawLine(gfx, ref y, "失重率", $"{tm.LostWeightPer:F2}%", fontNormal, pageW);
         DrawLine(gfx, ref y, "综合温升", $"{tm.DeltaTf:F1} °C", fontNormal, pageW);
         DrawLine(gfx, ref y, "试验时长", $"{tm.TotalTestTime} 秒", fontNormal, pageW);
-        y += 20;
+        y += 10;
+
+        // 嵌入温度曲线图（文档 2.9 节要求）
+        if (tempData.Count > 0)
+        {
+            using var chartStream = GenerateChartImage(tempData);
+            if (chartStream != null)
+            {
+                using var xImage = XImage.FromStream(chartStream);
+                double imgW = pageW - 100; // 左右各50边距
+                double imgH = imgW * 0.5;   // 2:1 宽高比
+                gfx.DrawImage(xImage, XUnit.FromPoint(50), XUnit.FromPoint(y), XUnit.FromPoint(imgW), XUnit.FromPoint(imgH));
+                y += imgH + 20;
+            }
+        }
 
         string verdict = (tm.DeltaTf <= 50 && tm.LostWeightPer <= 50 && tm.FlameDuration < 5)
             ? "判定结论: 通过 — 材料判定为不燃" : "判定结论: 不通过";
@@ -168,6 +185,38 @@ public class ExportService
 
         document.Save(filePath);
         return filePath;
+    }
+
+    /// <summary>用 OxyPlot 生成温度曲线 PNG 图片</summary>
+    private MemoryStream GenerateChartImage(List<TemperatureData> tempData)
+    {
+        var model = new PlotModel { Title = "温度曲线", TextColor = OxyColors.Black, PlotAreaBorderColor = OxyColors.Gray };
+        model.Axes.Add(new LinearAxis { Position = AxisPosition.Bottom, Title = "时间 (秒)", Minimum = 0, Maximum = tempData.Count + 10 });
+        model.Axes.Add(new LinearAxis { Position = AxisPosition.Left, Title = "温度 (°C)", Minimum = 0, Maximum = 800 });
+
+        var seriesTF1 = new LineSeries { Title = "炉温1", Color = OxyColors.Red, StrokeThickness = 1.5, MarkerType = MarkerType.None };
+        var seriesTF2 = new LineSeries { Title = "炉温2", Color = OxyColors.Orange, StrokeThickness = 1.5, MarkerType = MarkerType.None };
+        var seriesTS = new LineSeries { Title = "表面温", Color = OxyColors.Green, StrokeThickness = 1.5, MarkerType = MarkerType.None };
+        var seriesTC = new LineSeries { Title = "中心温", Color = OxyColors.Blue, StrokeThickness = 1.5, MarkerType = MarkerType.None };
+
+        foreach (var td in tempData)
+        {
+            seriesTF1.Points.Add(new DataPoint(td.Time, td.Temp1));
+            seriesTF2.Points.Add(new DataPoint(td.Time, td.Temp2));
+            seriesTS.Points.Add(new DataPoint(td.Time, td.TempSurface));
+            seriesTC.Points.Add(new DataPoint(td.Time, td.TempCenter));
+        }
+
+        model.Series.Add(seriesTF1);
+        model.Series.Add(seriesTF2);
+        model.Series.Add(seriesTS);
+        model.Series.Add(seriesTC);
+
+        var stream = new MemoryStream();
+        var exporter = new OxyPlot.WindowsForms.PngExporter { Width = 800, Height = 400, Resolution = 96 };
+        exporter.Export(model, stream);
+        stream.Position = 0;
+        return stream;
     }
 
     private void DrawLine(XGraphics gfx, ref double y, string label, string value, XFont font, double pageWidth)
