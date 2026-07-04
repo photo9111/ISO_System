@@ -1,0 +1,23 @@
+# .NET Build outputs
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.vs/
+
+# Logs
+logs/
+*.log
+
+# SQLite database
+*.db
+
+# Runtime generated data
+ISO-1.0v/Data/ISO11820/
+
+# IDE
+.idea/
+.vs/
+*.swp
+*.sln.docstates
